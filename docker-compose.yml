@@ -1,0 +1,166 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────
+# OpenTelemetry Stack completo — desarrollo local
+#
+# Servicios:
+#   flask-app      → http://localhost:5000
+#   jaeger         → http://localhost:16686  (traces)
+#   prometheus     → http://localhost:9090   (metrics)
+#   grafana        → http://localhost:3000   (dashboards) admin/admin
+#   loki           → http://localhost:3100   (logs)
+#   otel-collector → :4317 gRPC, :4318 HTTP  (receptor central)
+#
+# Arrancar:   docker compose up -d
+# Parar:      docker compose down
+# Logs:       docker compose logs -f flask-app
+# ─────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Flask app instrumentada con OTel ──────────────────────────
+  flask-app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    image: flask-otel-demo:local
+    container_name: flask-otel-demo
+    restart: unless-stopped
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: "flask-otel-demo"
+      SERVICE_VERSION: "1.0.0"
+      ENVIRONMENT: "development"
+      DB_PATH: "/tmp/app.db"
+      PORT: "5000"
+    ports:
+      - "5000:5000"
+    depends_on:
+      otel-collector:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [otel-net]
+
+  # ── OTel Collector — hub central de telemetría ────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./otel-collector/config.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"    # OTLP gRPC (apps envían aquí)
+      - "4318:4318"    # OTLP HTTP
+      - "8888:8888"    # Métricas del collector
+      - "8889:8889"    # Prometheus exporter
+      - "13133:13133"  # Health check
+      - "55679:55679"  # zPages (debug UI)
+    depends_on:
+      jaeger:
+        condition: service_started
+      loki:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
+             "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [otel-net]
+
+  # ── Jaeger — visualización de trazas ─────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.55
+    container_name: jaeger
+    restart: unless-stopped
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: "badger"
+      BADGER_EPHEMERAL: "false"
+      BADGER_DIRECTORY_VALUE: "/badger/data"
+      BADGER_DIRECTORY_KEY: "/badger/key"
+    volumes:
+      - jaeger_data:/badger
+    ports:
+      - "16686:16686"  # UI
+      - "14250:14250"  # gRPC (colecta spans)
+      - "14268:14268"  # HTTP (colecta spans)
+    networks: [otel-net]
+
+  # ── Prometheus — métricas ─────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks: [otel-net]
+
+  # ── Loki — almacenamiento de logs ─────────────────────────────
+  loki:
+    image: grafana/loki:2.9.6
+    container_name: loki
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks: [otel-net]
+
+  # ── Grafana — dashboards unificados ──────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlEditor"
+      GF_INSTALL_PLUGINS: "grafana-clock-panel"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider",
+             "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [otel-net]
+
+networks:
+  otel-net:
+    name: otel-observability
+    driver: bridge
+
+volumes:
+  jaeger_data:
+  prometheus_data:
+  loki_data:
+  grafana_data:

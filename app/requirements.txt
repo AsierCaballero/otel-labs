@@ -1,0 +1,15 @@
+Flask==3.0.3
+gunicorn==22.0.0
+
+# OpenTelemetry SDK core
+opentelemetry-sdk==1.24.0
+opentelemetry-api==1.24.0
+
+# Exporters OTLP (gRPC)
+opentelemetry-exporter-otlp-proto-grpc==1.24.0
+
+# Auto-instrumentaciones
+opentelemetry-instrumentation-flask==0.45b0
+opentelemetry-instrumentation-requests==0.45b0
+opentelemetry-instrumentation-sqlite3==0.45b0
+opentelemetry-instrumentation-logging==0.45b0
