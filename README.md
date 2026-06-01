@@ -6,6 +6,9 @@ Stack de observabilidad **vendor-free** con OpenTelemetry, Jaeger, Prometheus, L
 [![Grafana](https://img.shields.io/badge/Grafana-10.4-F46800?style=for-the-badge&logo=grafana&logoColor=white)](#)
 [![Jaeger](https://img.shields.io/badge/Jaeger-1.55-66CFE3?style=for-the-badge)](#)
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=for-the-badge&logo=python&logoColor=white)](#)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white)](#)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-DaemonSet-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](#)
+[![CI](https://img.shields.io/github/actions/workflow/status/asier-caballero/opentelemetry-devops-labs/ci.yml?branch=main&style=for-the-badge&logo=githubactions&logoColor=white)](https://github.com/asier-caballero/opentelemetry-devops-labs/actions)
 
 ---
 
